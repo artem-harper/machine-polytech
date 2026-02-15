@@ -6,19 +6,16 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Хранилище данных
 points = []
 routes = []
-point_counter = 1  # Глобальный счетчик для ID точек
+point_counter = 1
 
-# Предустановленный транспорт (3 штуки)
 VEHICLES = [
     {"id": 1, "name": "ТС-001", "display_name": "Транспортное средство #1", "color": "#3498db"},
     {"id": 2, "name": "ТС-002", "display_name": "Транспортное средство #2", "color": "#e74c3c"},
     {"id": 3, "name": "ТС-003", "display_name": "Транспортное средство #3", "color": "#2ecc71"}
 ]
 
-# Доступные действия для сегментов маршрута
 ACTIONS = [
     {"id": 1, "name": "Очистка снега"},
     {"id": 2, "name": "Заправка"},
@@ -28,7 +25,6 @@ ACTIONS = [
 
 @app.route('/')
 def index():
-    """Главная страница"""
     return render_template('index.html',
                            actions=ACTIONS,
                            vehicles=VEHICLES)
@@ -36,20 +32,18 @@ def index():
 
 @app.route('/api/points', methods=['GET', 'POST'])
 def handle_points():
-    """Обработка точек маршрута"""
     global point_counter
     if request.method == 'POST':
         data = request.json
         vehicle_id = data['vehicle_id']
 
-        # Получаем все точки для этого транспорта и считаем следующий номер
         vehicle_points = [p for p in points if p.get('vehicle_id') == vehicle_id]
         next_number = len(vehicle_points) + 1
 
         point = {
-            'id': point_counter,  # уникальный ID
+            'id': point_counter,
             'vehicle_id': vehicle_id,
-            'number': next_number,  # номер для отображения (начинается с 1 для каждого транспорта)
+            'number': next_number,
             'lat': data['lat'],
             'lng': data['lng'],
             'name': f'Точка {next_number}'
@@ -63,7 +57,6 @@ def handle_points():
 
 @app.route('/api/points/<int:point_id>', methods=['DELETE'])
 def delete_point(point_id):
-    """Удаление точки"""
     global points
     points = [p for p in points if p['id'] != point_id]
     return jsonify({'success': True})
@@ -71,16 +64,13 @@ def delete_point(point_id):
 
 @app.route('/api/vehicles/<int:vehicle_id>/points', methods=['GET'])
 def get_vehicle_points(vehicle_id):
-    """Получение точек для конкретного транспорта"""
     vehicle_points = [p for p in points if p.get('vehicle_id') == vehicle_id]
-    # Сортируем по ID (порядку добавления)
     vehicle_points.sort(key=lambda x: x['id'])
     return jsonify(vehicle_points)
 
 
 @app.route('/api/routes', methods=['GET', 'POST'])
 def handle_routes():
-    """Обработка маршрутов"""
     if request.method == 'POST':
         data = request.json
         route = {
@@ -97,7 +87,6 @@ def handle_routes():
 
 @app.route('/api/routes/<int:route_id>', methods=['PUT', 'DELETE'])
 def modify_route(route_id):
-    """Изменение или удаление маршрута"""
     global routes
 
     if request.method == 'DELETE':

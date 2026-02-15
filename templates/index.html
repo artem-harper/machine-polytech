@@ -35,9 +35,7 @@
             <div class="sidebar">
                 <div class="panel">
                     <h3>Транспорт</h3>
-                    <div id="vehiclesList" class="vehicles-list">
-                        <!-- Транспорт будет добавлен из предустановленного списка -->
-                    </div>
+                    <div id="vehiclesList" class="vehicles-list"></div>
                 </div>
 
                 <div class="panel">
@@ -65,7 +63,6 @@
         </div>
     </div>
 
-    <!-- Модальное окно для действий сегмента маршрута -->
     <div id="segmentActionsModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
@@ -84,36 +81,29 @@
     </div>
 
     <script>
-        // Инициализация карты
         let map = L.map('map').setView([55.7558, 37.6173], 4);
 
-        // Добавляем тайлы OpenStreetMap
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        // Предустановленный транспорт из бэкенда
         const VEHICLES = {{ vehicles|tojson }};
         const ACTIONS = {{ actions|tojson }};
 
-        // Глобальные переменные
-        let markers = []; // Все точки
-        let markerObjects = []; // Объекты маркеров Leaflet
-        let polylines = {}; // Линии для каждого транспорта {vehicle_id: polyline}
-        let currentPointLatLng = null; // Временное хранение координат новой точки
-        let routes = {}; // Маршруты для каждого транспорта {vehicle_id: {point_ids, segments}}
-        let activeVehicleId = null; // Активный транспорт для отображения и добавления точек
-        let currentSegmentIndex = null; // Текущий редактируемый сегмент
+        let markers = [];
+        let markerObjects = [];
+        let polylines = {};
+        let currentPointLatLng = null;
+        let routes = {};
+        let activeVehicleId = null;
+        let currentSegmentIndex = null;
 
-        // Загружаем данные при старте
         $(document).ready(function() {
-            console.log('VEHICLES loaded:', VEHICLES);
             initVehicles();
             loadAllPoints();
             loadAllRoutes();
         });
 
-        // Инициализация списка транспорта
         function initVehicles() {
             const vehiclesList = $('#vehiclesList');
             vehiclesList.empty();
@@ -135,24 +125,20 @@
             });
         }
 
-        // Выбор активного транспорта (для добавления точек и просмотра)
         window.selectActiveVehicle = function(vehicleId) {
             activeVehicleId = vehicleId;
 
-            // Подсвечиваем выбранный транспорт
             $('.vehicle-item').removeClass('active');
             $(`[data-vehicle-id="${vehicleId}"]`).addClass('active');
 
-            // Показываем информацию о маршруте
             updateActiveRouteInfo(vehicleId);
         };
 
-        // Обновление информации об активном маршруте
         function updateActiveRouteInfo(vehicleId) {
             const vehicle = VEHICLES.find(v => v.id === vehicleId);
             const route = routes[vehicleId];
             const vehiclePoints = markers.filter(m => m.vehicle_id === vehicleId)
-                                        .sort((a, b) => a.id - b.id); // сортируем по порядку добавления
+                                        .sort((a, b) => a.id - b.id);
 
             let html = `<h4>${vehicle.display_name} (${vehicle.name})</h4>`;
 
@@ -162,7 +148,6 @@
                 html += `<p>Точек на маршруте: ${vehiclePoints.length}</p>`;
                 html += '<div class="route-segments">';
 
-                // Отображаем сегменты между точками
                 for (let i = 0; i < vehiclePoints.length - 1; i++) {
                     const fromPoint = vehiclePoints[i];
                     const toPoint = vehiclePoints[i + 1];
@@ -192,7 +177,6 @@
             $('#activeRouteInfo').html(html);
         }
 
-        // Редактирование сегмента
         window.editSegment = function(vehicleId, segmentIndex) {
             activeVehicleId = vehicleId;
             currentSegmentIndex = segmentIndex;
@@ -204,7 +188,6 @@
 
             $('#segmentInfo').text(`Участок ${segmentIndex + 1}: от точки ${fromPoint.number} до точки ${toPoint.number}`);
 
-            // Загружаем сохраненные действия для этого сегмента
             const route = routes[vehicleId];
             const segmentActions = route?.segments?.[segmentIndex] || [];
 
@@ -216,19 +199,16 @@
             $('#segmentActionsModal').show();
         };
 
-        // Сохранение действий для сегмента
         $('#saveSegmentActions').click(function() {
             const selectedActions = [];
             $('#segmentActionCheckboxes input:checked').each(function() {
                 selectedActions.push(parseInt($(this).val()));
             });
 
-            // Получаем текущие точки для транспорта
             const vehiclePoints = markers.filter(m => m.vehicle_id === activeVehicleId)
                                         .sort((a, b) => a.id - b.id);
             const pointIds = vehiclePoints.map(p => p.id);
 
-            // Получаем или создаем маршрут
             let route = routes[activeVehicleId];
             const segments = route?.segments || [];
             segments[currentSegmentIndex] = selectedActions;
@@ -240,7 +220,6 @@
             };
 
             if (route) {
-                // Обновляем существующий маршрут
                 $.ajax({
                     url: `/api/routes/${route.id}`,
                     method: 'PUT',
@@ -253,7 +232,6 @@
                     }
                 });
             } else {
-                // Создаем новый маршрут
                 $.ajax({
                     url: '/api/routes',
                     method: 'POST',
@@ -268,19 +246,16 @@
             }
         });
 
-        // Режим добавления точки
         let addMode = false;
 
         $('#addPointMode').click(function() {
             if (!activeVehicleId) {
-                // Просто не включаем режим, если транспорт не выбран
                 return;
             }
             addMode = !addMode;
             $(this).toggleClass('active');
         });
 
-        // Обработчик клика по карте
         map.on('click', function(e) {
             if (addMode) {
                 if (!activeVehicleId) {
@@ -293,7 +268,6 @@
             }
         });
 
-        // Добавление точки
         function addPoint(lat, lng, vehicleId) {
             $.ajax({
                 url: '/api/points',
@@ -308,19 +282,13 @@
                     createMarker(response.point);
                     markers.push(response.point);
 
-                    // Обновляем точки на карте
                     loadVehiclePoints(vehicleId);
-
-                    // Обновляем счетчик точек
                     updateVehicleStats(vehicleId);
-
-                    // Обновляем информацию о маршруте
                     updateActiveRouteInfo(vehicleId);
                 }
             });
         }
 
-        // Создание маркера на карте
         function createMarker(point) {
             const vehicle = VEHICLES.find(v => v.id === point.vehicle_id);
 
@@ -348,7 +316,6 @@
             });
         }
 
-        // Удаление точки с карты
         window.deleteMapPoint = function(pointId) {
             const point = markers.find(m => m.id === pointId);
             if (!point) return;
@@ -359,21 +326,17 @@
                 url: `/api/points/${pointId}`,
                 method: 'DELETE',
                 success: function() {
-                    // Удаляем маркер
                     const markerObj = markerObjects.find(m => m.id === pointId);
                     if (markerObj) {
                         map.removeLayer(markerObj.marker);
                         markerObjects = markerObjects.filter(m => m.id !== pointId);
                     }
 
-                    // Удаляем из массива
                     markers = markers.filter(m => m.id !== pointId);
 
-                    // Обновляем линии и статистику
                     loadVehiclePoints(vehicleId);
                     updateVehicleStats(vehicleId);
 
-                    // Удаляем маршрут для этого транспорта, если он был
                     if (routes[vehicleId]) {
                         delete routes[vehicleId];
                     }
@@ -385,14 +348,12 @@
             });
         };
 
-        // Загрузка точек для конкретного транспорта и отрисовка линии
         function loadVehiclePoints(vehicleId) {
             $.get(`/api/vehicles/${vehicleId}/points`, function(points) {
                 drawRouteLine(vehicleId, points);
             });
         }
 
-        // Загрузка всех точек
         function loadAllPoints() {
             $.get('/api/points', function(data) {
                 markers = data;
@@ -400,7 +361,6 @@
                     createMarker(point);
                 });
 
-                // Группируем точки по транспорту и рисуем линии
                 const vehicleGroups = {};
                 data.forEach(point => {
                     if (!vehicleGroups[point.vehicle_id]) {
@@ -410,7 +370,6 @@
                 });
 
                 Object.keys(vehicleGroups).forEach(vehicleId => {
-                    // Сортируем точки по ID (порядку добавления)
                     vehicleGroups[vehicleId].sort((a, b) => a.id - b.id);
                     drawRouteLine(parseInt(vehicleId), vehicleGroups[vehicleId]);
                     updateVehicleStats(parseInt(vehicleId));
@@ -418,36 +377,30 @@
             });
         }
 
-        // Загрузка всех маршрутов
         function loadAllRoutes() {
             $.get('/api/routes', function(data) {
                 data.forEach(route => {
                     routes[route.vehicle_id] = route;
                 });
 
-                // Если есть активный транспорт, обновляем его информацию
                 if (activeVehicleId) {
                     updateActiveRouteInfo(activeVehicleId);
                 }
             });
         }
 
-        // Отрисовка линии маршрута для конкретного транспорта
         function drawRouteLine(vehicleId, points) {
-            // Удаляем старую линию для этого транспорта
             if (polylines[vehicleId]) {
                 map.removeLayer(polylines[vehicleId]);
             }
 
             if (points.length < 2) return;
 
-            // Сортируем точки по ID (порядку добавления)
             const sortedPoints = [...points].sort((a, b) => a.id - b.id);
             const latlngs = sortedPoints.map(p => [p.lat, p.lng]);
 
             const vehicle = VEHICLES.find(v => v.id === vehicleId);
 
-            // Создаем новую линию
             polylines[vehicleId] = L.polyline(latlngs, {
                 color: vehicle.color,
                 weight: 4,
@@ -456,13 +409,11 @@
             }).addTo(map);
         }
 
-        // Обновление статистики транспорта
         function updateVehicleStats(vehicleId) {
             const vehiclePoints = markers.filter(m => m.vehicle_id === vehicleId);
             $(`#vehicle-points-${vehicleId}`).text(vehiclePoints.length + ' точек');
         }
 
-        // Кнопка Старт
         $('#startRouteBtn').click(function() {
             const activeRoutes = Object.values(routes);
 
@@ -470,27 +421,22 @@
                 return;
             }
 
-            // Визуально показываем, что маршруты запущены
             $(this).css('background-color', '#27ae60');
             setTimeout(() => {
                 $(this).css('background-color', '#f39c12');
             }, 200);
         });
 
-        // Очистка всего
         $('#clearAll').click(function() {
-            // Очищаем карту
             markerObjects.forEach(m => map.removeLayer(m.marker));
             Object.values(polylines).forEach(p => map.removeLayer(p));
 
-            // Очищаем массивы
             markers = [];
             markerObjects = [];
             polylines = {};
             routes = {};
             activeVehicleId = null;
 
-            // Очищаем UI
             VEHICLES.forEach(vehicle => {
                 $(`#vehicle-points-${vehicle.id}`).text('0 точек');
             });
@@ -498,7 +444,6 @@
             $('#activeRouteInfo').html('<p>Выберите транспорт для просмотра маршрута</p>');
             $('.vehicle-item').removeClass('active');
 
-            // Очищаем через API
             $.ajax({ url: '/api/points', method: 'GET' }).then(points => {
                 points.forEach(p => $.ajax({ url: `/api/points/${p.id}`, method: 'DELETE' }));
             });
@@ -508,7 +453,6 @@
             });
         });
 
-        // Закрытие модальных окон
         $('.close').click(function() {
             $('.modal').hide();
         });
