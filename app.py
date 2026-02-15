@@ -17,11 +17,11 @@ VEHICLES = [
     {"id": 3, "name": "ТС-003", "display_name": "Транспортное средство #3", "color": "#2ecc71"}
 ]
 
-# Доступные действия для маршрута
+# Доступные действия для сегментов маршрута
 ACTIONS = [
-    {"id": 1, "name": "Очистка снега", "icon": "❄️"},
-    {"id": 2, "name": "Заправка", "icon": "⛽"},
-    {"id": 3, "name": "Техническое обслуживание", "icon": "🔧"}
+    {"id": 1, "name": "Очистка снега", "icon": ""},
+    {"id": 2, "name": "Заправка", "icon": ""},
+    {"id": 3, "name": "Техническое обслуживание", "icon": ""}
 ]
 
 
@@ -68,7 +68,7 @@ def handle_routes():
             'id': len(routes) + 1,
             'vehicle_id': data['vehicle_id'],
             'point_ids': data['point_ids'],
-            'actions': data.get('actions', [])
+            'segments': data.get('segments', [])  # Действия для каждого сегмента
         }
         routes.append(route)
         return jsonify({'success': True, 'route': route})
@@ -100,6 +100,8 @@ def modify_route(route_id):
 def get_vehicle_points(vehicle_id):
     """Получение точек для конкретного транспорта"""
     vehicle_points = [p for p in points if p.get('vehicle_id') == vehicle_id]
+    # Сортируем по ID для правильного порядка
+    vehicle_points.sort(key=lambda x: x['id'])
     return jsonify(vehicle_points)
 
 
@@ -109,6 +111,7 @@ def get_vehicle_route(vehicle_id):
     vehicle_route = next((r for r in routes if r['vehicle_id'] == vehicle_id), None)
     if vehicle_route:
         route_points = [p for p in points if p['id'] in vehicle_route['point_ids']]
+        route_points.sort(key=lambda x: vehicle_route['point_ids'].index(x['id']))
         return jsonify({
             'route': vehicle_route,
             'points': route_points

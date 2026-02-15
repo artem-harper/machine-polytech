@@ -41,7 +41,7 @@
                 </div>
 
                 <div class="panel">
-                    <h3>Действия для маршрута</h3>
+                    <h3>Доступные действия</h3>
                     <div class="actions-list">
                         {% for action in actions %}
                         <div class="action-item" data-action-id="{{ action.id }}">
@@ -50,7 +50,6 @@
                         </div>
                         {% endfor %}
                     </div>
-                    <p class="actions-hint">Выберите действия для активного маршрута</p>
                 </div>
 
                 <div class="panel">
@@ -79,13 +78,13 @@
         </div>
     </div>
 
-    <!-- Модальное окно для действий маршрута -->
-    <div id="routeActionsModal" class="modal">
+    <!-- Модальное окно для действий сегмента маршрута -->
+    <div id="segmentActionsModal" class="modal">
         <div class="modal-content">
             <span class="close">&times;</span>
-            <h3>Действия для маршрута</h3>
-            <p class="modal-subtitle">Выберите действия, которые нужно выполнить на маршруте</p>
-            <div id="routeActionCheckboxes" class="action-checkboxes">
+            <h3>Действия на участке маршрута</h3>
+            <p id="segmentInfo" class="modal-subtitle"></p>
+            <div id="segmentActionCheckboxes" class="action-checkboxes">
                 {% for action in actions %}
                 <label class="action-checkbox">
                     <input type="checkbox" value="{{ action.id }}">
@@ -94,7 +93,7 @@
                 </label>
                 {% endfor %}
             </div>
-            <button id="saveRouteActions" class="btn-primary">Сохранить для маршрута</button>
+            <button id="saveSegmentActions" class="btn-primary">Сохранить для участка</button>
         </div>
     </div>
 
@@ -109,17 +108,20 @@
 
         // Предустановленный транспорт из бэкенда
         const VEHICLES = {{ vehicles|tojson }};
+        const ACTIONS = {{ actions|tojson }};
 
         // Глобальные переменные
         let markers = []; // Все точки
         let markerObjects = []; // Объекты маркеров Leaflet
         let polylines = {}; // Линии для каждого транспорта {vehicle_id: polyline}
         let currentPointLatLng = null; // Временное хранение координат новой точки
-        let routes = {}; // Маршруты для каждого транспорта {vehicle_id: {point_ids, actions}}
+        let routes = {}; // Маршруты для каждого транспорта {vehicle_id: {point_ids, segments}}
         let activeVehicleId = null; // Активный транспорт для отображения
+        let currentSegmentIndex = null; // Текущий редактируемый сегмент
 
         // Загружаем данные при старте
         $(document).ready(function() {
+            console.log('VEHICLES loaded:', VEHICLES);
             initVehicles();
             loadAllPoints();
             loadAllRoutes();
@@ -139,9 +141,8 @@
                         </div>
                         <div class="vehicle-stats">
                             <span class="points-count" id="vehicle-points-${vehicle.id}">0 точек</span>
-                            <span class="actions-indicator" id="vehicle-actions-${vehicle.id}" title="Действия на маршруте">⚡ 0</span>
                         </div>
-                        <button class="btn-small select-vehicle-route" onclick="selectVehicleRoute(${vehicle.id})">Выбрать маршрут</button>
+                        <button class="btn-small select-vehicle-route" onclick="selectVehicleRoute(${vehicle.id})">Показать маршрут</button>
                     </div>
                 `);
                 vehiclesList.append(vehicleElement);
@@ -158,21 +159,14 @@
 
             // Показываем информацию о маршруте
             updateActiveRouteInfo(vehicleId);
-
-            // Если есть сохраненный маршрут, загружаем его действия
-            if (routes[vehicleId]) {
-                $('#routeActionCheckboxes input').prop('checked', false);
-                routes[vehicleId].actions.forEach(actionId => {
-                    $(`#routeActionCheckboxes input[value="${actionId}"]`).prop('checked', true');
-                });
-            }
         };
 
         // Обновление информации об активном маршруте
         function updateActiveRouteInfo(vehicleId) {
             const vehicle = VEHICLES.find(v => v.id === vehicleId);
             const route = routes[vehicleId];
-            const vehiclePoints = markers.filter(m => m.vehicle_id === vehicleId);
+            const vehiclePoints = markers.filter(m => m.vehicle_id === vehicleId)
+                                        .sort((a, b) => a.id - b.id);
 
             let html = `<h4>${vehicle.display_name} (${vehicle.name})</h4>`;
 
@@ -180,83 +174,100 @@
                 html += '<p>Нет точек маршрута</p>';
             } else {
                 html += `<p>Точек на маршруте: ${vehiclePoints.length}</p>`;
+                html += '<div class="route-segments">';
 
-                // Сортируем точки по ID
-                const sortedPoints = [...vehiclePoints].sort((a, b) => a.id - b.id);
-                html += '<div class="route-points-list">';
-                sortedPoints.forEach((point, index) => {
-                    html += `<div class="route-point-item">${index + 1}. Точка ${point.id} (${point.lat.toFixed(4)}, ${point.lng.toFixed(4)})</div>`;
-                });
+                // Отображаем сегменты между точками
+                for (let i = 0; i < vehiclePoints.length - 1; i++) {
+                    const fromPoint = vehiclePoints[i];
+                    const toPoint = vehiclePoints[i + 1];
+                    const segmentActions = route?.segments?.[i] || [];
+
+                    const actionIcons = segmentActions.map(actionId => {
+                        const action = ACTIONS.find(a => a.id === actionId);
+                        return action ? action.icon : '';
+                    }).join(' ');
+
+                    html += `
+                        <div class="route-segment">
+                            <div class="segment-header">
+                                <span class="segment-title">Участок ${i + 1}: Точка ${fromPoint.id} → Точка ${toPoint.id}</span>
+                                <button class="btn-small btn-primary" onclick="editSegment(${vehicleId}, ${i})">✏️ Действия</button>
+                            </div>
+                            <div class="segment-actions">
+                                ${actionIcons || 'Нет действий'}
+                            </div>
+                        </div>
+                    `;
+                }
+
                 html += '</div>';
             }
-
-            if (route && route.actions && route.actions.length > 0) {
-                const actionNames = route.actions.map(actionId => {
-                    const action = {{ actions|tojson }}.find(a => a.id === actionId);
-                    return action ? `${action.icon} ${action.name}` : '';
-                }).join(', ');
-                html += `<p class="route-actions"><strong>Действия:</strong> ${actionNames}</p>`;
-            } else {
-                html += `<p class="route-actions"><strong>Действия:</strong> не выбраны</p>`;
-            }
-
-            html += `<button class="btn-small btn-primary" onclick="showRouteActionsModal(${vehicleId})" style="margin-top: 10px;">Редактировать действия</button>`;
 
             $('#activeRouteInfo').html(html);
         }
 
-        // Показать модальное окно для действий маршрута
-        window.showRouteActionsModal = function(vehicleId) {
+        // Редактирование сегмента
+        window.editSegment = function(vehicleId, segmentIndex) {
             activeVehicleId = vehicleId;
+            currentSegmentIndex = segmentIndex;
 
-            // Загружаем сохраненные действия
-            if (routes[vehicleId]) {
-                $('#routeActionCheckboxes input').prop('checked', false);
-                routes[vehicleId].actions.forEach(actionId => {
-                    $(`#routeActionCheckboxes input[value="${actionId}"]`).prop('checked', true');
-                });
-            } else {
-                $('#routeActionCheckboxes input').prop('checked', false');
-            }
+            const vehiclePoints = markers.filter(m => m.vehicle_id === vehicleId)
+                                        .sort((a, b) => a.id - b.id);
+            const fromPoint = vehiclePoints[segmentIndex];
+            const toPoint = vehiclePoints[segmentIndex + 1];
 
-            $('#routeActionsModal').show();
+            $('#segmentInfo').text(`Участок ${segmentIndex + 1}: от точки ${fromPoint.id} до точки ${toPoint.id}`);
+
+            // Загружаем сохраненные действия для этого сегмента
+            const route = routes[vehicleId];
+            const segmentActions = route?.segments?.[segmentIndex] || [];
+
+            $('#segmentActionCheckboxes input').prop('checked', false);
+            segmentActions.forEach(actionId => {
+                $(`#segmentActionCheckboxes input[value="${actionId}"]`).prop('checked', true);
+            });
+
+            $('#segmentActionsModal').show();
         };
 
-        // Сохранение действий для маршрута
-        $('#saveRouteActions').click(function() {
+        // Сохранение действий для сегмента
+        $('#saveSegmentActions').click(function() {
             const selectedActions = [];
-            $('#routeActionCheckboxes input:checked').each(function() {
+            $('#segmentActionCheckboxes input:checked').each(function() {
                 selectedActions.push(parseInt($(this).val()));
             });
 
-            // Обновляем счетчик действий в интерфейсе
-            $(`#vehicle-actions-${activeVehicleId}`).text(`⚡ ${selectedActions.length}`);
-
-            // Сохраняем маршрут
-            const vehiclePoints = markers.filter(m => m.vehicle_id === activeVehicleId);
+            // Получаем текущие точки для транспорта
+            const vehiclePoints = markers.filter(m => m.vehicle_id === activeVehicleId)
+                                        .sort((a, b) => a.id - b.id);
             const pointIds = vehiclePoints.map(p => p.id);
+
+            // Получаем или создаем маршрут
+            let route = routes[activeVehicleId];
+            const segments = route?.segments || [];
+            segments[currentSegmentIndex] = selectedActions;
 
             const routeData = {
                 vehicle_id: activeVehicleId,
                 point_ids: pointIds,
-                actions: selectedActions
+                segments: segments
             };
 
-            // Если маршрут уже существует, обновляем его
-            if (routes[activeVehicleId]) {
+            if (route) {
+                // Обновляем существующий маршрут
                 $.ajax({
-                    url: `/api/routes/${routes[activeVehicleId].id}`,
+                    url: `/api/routes/${route.id}`,
                     method: 'PUT',
                     contentType: 'application/json',
                     data: JSON.stringify(routeData),
                     success: function(response) {
                         routes[activeVehicleId] = response.route;
                         updateActiveRouteInfo(activeVehicleId);
-                        $('#routeActionsModal').hide();
+                        $('#segmentActionsModal').hide();
                     }
                 });
             } else {
-                // Иначе создаем новый
+                // Создаем новый маршрут
                 $.ajax({
                     url: '/api/routes',
                     method: 'POST',
@@ -265,7 +276,7 @@
                     success: function(response) {
                         routes[activeVehicleId] = response.route;
                         updateActiveRouteInfo(activeVehicleId);
-                        $('#routeActionsModal').hide();
+                        $('#segmentActionsModal').hide();
                     }
                 });
             }
@@ -408,6 +419,11 @@
                         loadVehiclePoints(vehicleId);
                         updateVehicleStats(vehicleId);
 
+                        // Удаляем маршрут для этого транспорта, если он был
+                        if (routes[vehicleId]) {
+                            delete routes[vehicleId];
+                        }
+
                         if (activeVehicleId === vehicleId) {
                             updateActiveRouteInfo(vehicleId);
                         }
@@ -452,7 +468,6 @@
             $.get('/api/routes', function(data) {
                 data.forEach(route => {
                     routes[route.vehicle_id] = route;
-                    $(`#vehicle-actions-${route.vehicle_id}`).text(`⚡ ${route.actions.length}`);
                 });
             });
         }
@@ -499,15 +514,26 @@
             let message = '🚀 Запуск маршрутов:\n\n';
             activeRoutes.forEach(route => {
                 const vehicle = VEHICLES.find(v => v.id === route.vehicle_id);
-                const points = markers.filter(m => route.point_ids.includes(m.id));
-                const actions = route.actions.map(actionId => {
-                    const action = {{ actions|tojson }}.find(a => a.id === actionId);
-                    return action ? action.name : '';
-                }).join(', ');
+                const points = markers.filter(m => route.point_ids.includes(m.id))
+                                    .sort((a, b) => a.id - b.id);
 
                 message += `${vehicle.display_name} (${vehicle.name}):\n`;
                 message += `  Точек: ${points.length}\n`;
-                message += `  Действия: ${actions || 'нет'}\n\n`;
+
+                // Показываем действия по сегментам
+                if (route.segments && route.segments.length > 0) {
+                    message += `  Действия по участкам:\n`;
+                    route.segments.forEach((segmentActions, idx) => {
+                        if (idx < points.length - 1) {
+                            const actionNames = segmentActions.map(actionId => {
+                                const action = ACTIONS.find(a => a.id === actionId);
+                                return action ? action.name : '';
+                            }).join(', ');
+                            message += `    Участок ${idx + 1} (${points[idx].id} → ${points[idx+1].id}): ${actionNames || 'нет'}\n`;
+                        }
+                    });
+                }
+                message += '\n';
             });
 
             alert(message);
@@ -530,7 +556,6 @@
                 // Очищаем UI
                 VEHICLES.forEach(vehicle => {
                     $(`#vehicle-points-${vehicle.id}`).text('0 точек');
-                    $(`#vehicle-actions-${vehicle.id}`).text('⚡ 0');
                 });
 
                 $('#activeRouteInfo').html('<p>Выберите транспорт для просмотра маршрута</p>');

@@ -440,3 +440,45 @@ h1 {
         align-items: center;
     }
 }
+
+/* Стили для сегментов маршрута */
+.route-segments {
+    margin-top: 15px;
+}
+
+.route-segment {
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 12px;
+    margin-bottom: 10px;
+    border-left: 3px solid #3498db;
+}
+
+.segment-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.segment-title {
+    font-weight: 500;
+    color: #2c3e50;
+    font-size: 13px;
+}
+
+.segment-actions {
+    font-size: 16px;
+    color: #7f8c8d;
+}
+
+/* Обновляем стили для модального окна */
+.modal-subtitle {
+    margin: 10px 0 20px;
+    color: #2c3e50;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 8px;
+    background: #e8f4fd;
+    border-radius: 4px;
+}
