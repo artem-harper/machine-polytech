@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Планировщик маршрутов транспорта</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        #map {
+            height: 600px;
+            width: 100%;
+            border-radius: 10px;
+            z-index: 1;
+        }
+        .leaflet-container {
+            font-family: inherit;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Планировщик маршрутов транспорта</h1>
+            <div class="controls">
+                <button id="addPointMode" class="btn-primary">Добавить точку</button>
+                <button id="addVehicleBtn" class="btn-success">Добавить транспорт</button>
+                <button id="startRouteBtn" class="btn-start">Старт</button>
+                <button id="clearAll" class="btn-danger">Очистить все</button>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="panel">
+                    <h3>Транспорт</h3>
+                    <div id="vehiclesList" class="vehicles-list">
+                        <!-- Транспорт будет добавляться сюда -->
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h3>Действия</h3>
+                    <div class="actions-list">
+                        {% for action in actions %}
+                        <div class="action-item" data-action-id="{{ action.id }}">
+                            <span class="action-name">{{ action.name }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для добавления транспорта -->
+    <div id="vehicleModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Добавить транспорт</h3>
+            <div class="form-group">
+                <label for="vehicleName">Название транспорта:</label>
+                <input type="text" id="vehicleName" placeholder="Например: ГАЗель-1" autocomplete="off">
+            </div>
+            <button id="saveVehicle" class="btn-primary">Сохранить</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно для выбора транспорта при добавлении точки -->
+    <div id="selectVehicleModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Выберите транспорт для точки</h3>
+            <div id="vehicleSelection" class="vehicle-selection">
+                <!-- Список транспорта будет добавлен динамически -->
+            </div>
+            <button id="cancelPoint" class="btn-danger">Отмена</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно для действий на точке -->
+    <div id="actionModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Выберите действия для точки</h3>
+            <div id="actionCheckboxes" class="action-checkboxes">
+                {% for action in actions %}
+                <label class="action-checkbox">
+                    <input type="checkbox" value="{{ action.id }}">
+                    {{ action.name }}
+                </label>
+                {% endfor %}
+            </div>
+            <button id="savePointActions" class="btn-primary">Сохранить</button>
+        </div>
+    </div>
+
+    <script>
+        // Инициализация карты
+        let map = L.map('map').setView([55.7558, 37.6173], 4);
+
+        // Добавляем тайлы OpenStreetMap
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Глобальные переменные
+        let markers = []; // Все точки
+        let markerObjects = []; // Объекты маркеров Leaflet
+        let polylines = {}; // Линии для каждого транспорта {vehicle_id: polyline}
+        let currentPointLatLng = null; // Временное хранение координат новой точки
+        let vehicles = []; // Список транспорта
+        let colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c']; // Цвета для разного транспорта
+
+        // Загружаем данные при старте
+        $(document).ready(function() {
+            loadVehicles();
+            loadAllPoints();
+        });
+
+        // Режим добавления точки
+        let addMode = false;
+
+        $('#addPointMode').click(function() {
+            if (vehicles.length === 0) {
+                alert('Сначала добавьте транспорт');
+                return;
+            }
+            addMode = !addMode;
+            $(this).toggleClass('active');
+            if (addMode) {
+                alert('Кликните на карту, чтобы добавить точку');
+            }
+        });
+
+        // Обработчик клика по карте
+        map.on('click', function(e) {
+            if (addMode) {
+                currentPointLatLng = e.latlng;
+                showVehicleSelection();
+            }
+        });
+
+        // Показать окно выбора транспорта для точки
+        function showVehicleSelection() {
+            const vehicleSelection = $('#vehicleSelection');
+            vehicleSelection.empty();
+
+            if (vehicles.length === 0) {
+                vehicleSelection.append('<div class="no-vehicles">Нет доступного транспорта</div>');
+                return;
+            }
+
+            vehicles.forEach(vehicle => {
+                const color = colors[(vehicle.id - 1) % colors.length];
+                const vehiclePoints = markers.filter(m => m.vehicle_id === vehicle.id);
+
+                vehicleSelection.append(`
+                    <div class="vehicle-option" data-vehicle-id="${vehicle.id}" style="border-left-color: ${color}">
+                        <span class="vehicle-option-name">${vehicle.name}</span>
+                        <span class="vehicle-points-count">${vehiclePoints.length} точек</span>
+                        <button class="btn-small select-vehicle">Выбрать</button>
+                    </div>
+                `);
+            });
+
+            $('#selectVehicleModal').show();
+        }
+
+        // Выбор транспорта для точки
+        $(document).on('click', '.select-vehicle', function() {
+            const vehicleId = $(this).closest('.vehicle-option').data('vehicle-id');
+            addPoint(currentPointLatLng.lat, currentPointLatLng.lng, vehicleId);
+            $('#selectVehicleModal').hide();
+            addMode = false;
+            $('#addPointMode').removeClass('active');
+        });
+
+        $('#cancelPoint').click(function() {
+            $('#selectVehicleModal').hide();
+            addMode = false;
+            $('#addPointMode').removeClass('active');
+        });
+
+        // Добавление точки
+        function addPoint(lat, lng, vehicleId) {
+            $.ajax({
+                url: '/api/points',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    lat: lat,
+                    lng: lng,
+                    vehicle_id: vehicleId,
+                    actions: [] // По умолчанию без действий
+                }),
+                success: function(response) {
+                    createMarker(response.point);
+                    markers.push(response.point);
+                    loadVehiclePoints(vehicleId); // Перезагружаем точки для этого транспорта
+                    updateVehiclePointsCount(vehicleId); // Обновляем счетчик точек
+                }
+            });
+        }
+
+        // Создание маркера на карте
+        function createMarker(point) {
+            const vehicle = vehicles.find(v => v.id === point.vehicle_id);
+            const color = colors[(point.vehicle_id - 1) % colors.length];
+
+            const marker = L.marker([point.lat, point.lng], {
+                icon: L.divIcon({
+                    className: 'custom-marker',
+                    html: `<div style="background-color: ${color}; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">${point.id}</div>`,
+                    iconSize: [30, 30],
+                    iconAnchor: [15, 15]
+                })
+            }).addTo(map);
+
+            // Получаем названия действий
+            const actionsList = point.actions && point.actions.length > 0
+                ? point.actions.map(actionId => {
+                    const action = {{ actions|tojson }}.find(a => a.id === actionId);
+                    return action ? action.name : '';
+                  }).join(', ')
+                : 'Нет действий';
+
+            const vehicleName = vehicle ? vehicle.name : 'Неизвестный транспорт';
+            marker.bindPopup(`
+                <b>Точка ${point.id}</b><br>
+                Транспорт: ${vehicleName}<br>
+                Координаты: ${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}<br>
+                Действия: ${actionsList}<br>
+                <button onclick="showActionModal(${point.id})" style="margin-top: 5px; padding: 3px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">Выбрать действия</button>
+            `);
+
+            marker.on('popupopen', function() {
+                // Добавляем обработчик для кнопки в popup
+                $('.select-actions-btn').click(function() {
+                    showActionModal(point.id);
+                });
+            });
+
+            markerObjects.push({
+                id: point.id,
+                marker: marker,
+                vehicle_id: point.vehicle_id
+            });
+        }
+
+        // Показать модальное окно для выбора действий
+        function showActionModal(pointId) {
+            currentPointId = pointId;
+            $('#actionModal').show();
+
+            const point = markers.find(m => m.id === pointId);
+            if (point && point.actions) {
+                $('#actionCheckboxes input').each(function() {
+                    $(this).prop('checked', point.actions.includes(parseInt($(this).val())));
+                });
+            } else {
+                $('#actionCheckboxes input').prop('checked', false);
+            }
+        }
+
+        // Сохранение действий для точки
+        $('#savePointActions').click(function() {
+            const selectedActions = [];
+            $('#actionCheckboxes input:checked').each(function() {
+                selectedActions.push(parseInt($(this).val()));
+            });
+
+            $.ajax({
+                url: `/api/points/${currentPointId}`,
+                method: 'PUT',
+                contentType: 'application/json',
+                data: JSON.stringify({ actions: selectedActions }),
+                success: function(response) {
+                    // Обновляем данные точки
+                    const point = markers.find(m => m.id === currentPointId);
+                    if (point) {
+                        point.actions = selectedActions;
+                    }
+
+                    // Обновляем попап маркера
+                    const markerObj = markerObjects.find(m => m.id === currentPointId);
+                    if (markerObj) {
+                        const vehicle = vehicles.find(v => v.id === point.vehicle_id);
+                        const actionsList = selectedActions.length > 0
+                            ? selectedActions.map(actionId => {
+                                const action = {{ actions|tojson }}.find(a => a.id === actionId);
+                                return action ? action.name : '';
+                              }).join(', ')
+                            : 'Нет действий';
+
+                        markerObj.marker.setPopupContent(`
+                            <b>Точка ${point.id}</b><br>
+                            Транспорт: ${vehicle.name}<br>
+                            Координаты: ${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}<br>
+                            Действия: ${actionsList}<br>
+                            <button onclick="showActionModal(${point.id})" style="margin-top: 5px; padding: 3px 10px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">Выбрать действия</button>
+                        `);
+                    }
+
+                    $('#actionModal').hide();
+                }
+            });
+        });
+
+        // Загрузка точек для конкретного транспорта и отрисовка линии
+        function loadVehiclePoints(vehicleId) {
+            $.get(`/api/vehicles/${vehicleId}/points`, function(points) {
+                drawRouteLine(vehicleId, points);
+            });
+        }
+
+        // Загрузка всех точек
+        function loadAllPoints() {
+            $.get('/api/points', function(data) {
+                markers = data;
+                data.forEach(point => {
+                    createMarker(point);
+                });
+
+                // Группируем точки по транспорту и рисуем линии
+                const vehicleGroups = {};
+                data.forEach(point => {
+                    if (!vehicleGroups[point.vehicle_id]) {
+                        vehicleGroups[point.vehicle_id] = [];
+                    }
+                    vehicleGroups[point.vehicle_id].push(point);
+                });
+
+                Object.keys(vehicleGroups).forEach(vehicleId => {
+                    drawRouteLine(parseInt(vehicleId), vehicleGroups[vehicleId]);
+                    updateVehiclePointsCount(parseInt(vehicleId));
+                });
+            });
+        }
+
+        // Отрисовка линии маршрута для конкретного транспорта
+        function drawRouteLine(vehicleId, points) {
+            // Удаляем старую линию для этого транспорта
+            if (polylines[vehicleId]) {
+                map.removeLayer(polylines[vehicleId]);
+            }
+
+            if (points.length < 2) return;
+
+            // Сортируем точки по ID (порядку добавления)
+            const sortedPoints = [...points].sort((a, b) => a.id - b.id);
+            const latlngs = sortedPoints.map(p => [p.lat, p.lng]);
+
+            const color = colors[(vehicleId - 1) % colors.length];
+
+            // Создаем новую линию
+            polylines[vehicleId] = L.polyline(latlngs, {
+                color: color,
+                weight: 4,
+                opacity: 0.7,
+                lineJoin: 'round'
+            }).addTo(map);
+        }
+
+        // Обновление счетчика точек для транспорта
+        function updateVehiclePointsCount(vehicleId) {
+            const vehiclePoints = markers.filter(m => m.vehicle_id === vehicleId);
+            $(`[data-vehicle-id="${vehicleId}"] .points-count`).text(vehiclePoints.length + ' точек');
+        }
+
+        // Работа с транспортом
+        $('#addVehicleBtn').click(function() {
+            $('#vehicleModal').show();
+        });
+
+        $('#saveVehicle').click(function() {
+            const name = $('#vehicleName').val().trim();
+
+            if (!name) {
+                alert('Введите название транспорта');
+                return;
+            }
+
+            $.ajax({
+                url: '/api/vehicles',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ name: name }),
+                success: function(response) {
+                    vehicles.push(response.vehicle);
+                    addVehicleToList(response.vehicle);
+                    $('#vehicleModal').hide();
+                    $('#vehicleName').val('');
+                }
+            });
+        });
+
+        function addVehicleToList(vehicle) {
+            const color = colors[(vehicle.id - 1) % colors.length];
+            const vehiclesList = $('#vehiclesList');
+            const vehicleElement = $(`
+                <div class="vehicle-item" data-vehicle-id="${vehicle.id}" style="border-left-color: ${color}">
+                    <div class="vehicle-header">
+                        <span class="vehicle-name">${vehicle.name}</span>
+                        <button class="btn-small btn-danger" onclick="deleteVehicle(${vehicle.id})">✖</button>
+                    </div>
+                    <div class="vehicle-points">
+                        <span class="points-count">0 точек</span>
+                    </div>
+                </div>
+            `);
+            vehiclesList.append(vehicleElement);
+        }
+
+        function deleteVehicle(vehicleId) {
+            if (confirm('Удалить этот транспорт и все его точки?')) {
+                $.ajax({
+                    url: `/api/vehicles/${vehicleId}`,
+                    method: 'DELETE',
+                    success: function() {
+                        // Удаляем из списка
+                        $(`[data-vehicle-id="${vehicleId}"]`).remove();
+
+                        // Удаляем из массива
+                        vehicles = vehicles.filter(v => v.id !== vehicleId);
+
+                        // Удаляем маркеры этого транспорта с карты
+                        markerObjects.forEach(m => {
+                            if (m.vehicle_id === vehicleId) {
+                                map.removeLayer(m.marker);
+                            }
+                        });
+
+                        // Удаляем линию этого транспорта
+                        if (polylines[vehicleId]) {
+                            map.removeLayer(polylines[vehicleId]);
+                            delete polylines[vehicleId];
+                        }
+
+                        // Очищаем глобальные массивы
+                        markers = markers.filter(m => m.vehicle_id !== vehicleId);
+                        markerObjects = markerObjects.filter(m => m.vehicle_id !== vehicleId);
+                    }
+                });
+            }
+        }
+
+        function loadVehicles() {
+            $.get('/api/vehicles', function(data) {
+                vehicles = data;
+                vehicles.forEach(vehicle => {
+                    addVehicleToList(vehicle);
+                });
+            });
+        }
+
+        // Кнопка Старт
+        $('#startRouteBtn').click(function() {
+            if (vehicles.length === 0) {
+                alert('Добавьте транспорт');
+                return;
+            }
+
+            const routes = vehicles.map(v => {
+                const vehiclePoints = markers.filter(m => m.vehicle_id === v.id);
+                return {
+                    vehicle: v.name,
+                    points_count: vehiclePoints.length
+                };
+            });
+
+            let message = 'Маршрут начат!\n\n';
+            routes.forEach(r => {
+                message += `${r.vehicle}: ${r.points_count} точек\n`;
+            });
+
+            alert(message);
+        });
+
+        // Очистка всего
+        $('#clearAll').click(function() {
+            if (confirm('Очистить все точки и транспорт?')) {
+                // Очищаем карту
+                markerObjects.forEach(m => map.removeLayer(m.marker));
+                Object.values(polylines).forEach(p => map.removeLayer(p));
+
+                // Очищаем массивы
+                markers = [];
+                markerObjects = [];
+                polylines = {};
+                vehicles = [];
+
+                // Очищаем списки
+                $('#vehiclesList').empty();
+
+                // Очищаем через API
+                $.ajax({ url: '/api/points', method: 'GET' }).then(points => {
+                    points.forEach(p => $.ajax({ url: `/api/points/${p.id}`, method: 'DELETE' }));
+                });
+
+                $.ajax({ url: '/api/vehicles', method: 'GET' }).then(vehicles => {
+                    vehicles.forEach(v => $.ajax({ url: `/api/vehicles/${v.id}`, method: 'DELETE' }));
+                });
+            }
+        });
+
+        // Закрытие модальных окон
+        $('.close').click(function() {
+            $('.modal').hide();
+        });
+
+        $(window).click(function(event) {
+            if ($(event.target).hasClass('modal')) {
+                $('.modal').hide();
+            }
+        });
+
+        // Делаем функцию глобальной для вызова из popup
+        window.showActionModal = showActionModal;
+    </script>
+</body>
+</html>
