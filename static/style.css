@@ -482,3 +482,29 @@ h1 {
     background: #e8f4fd;
     border-radius: 4px;
 }
+
+/* Стили для всплывающих подсказок (тостов) */
+.toast {
+    visibility: hidden;
+    min-width: 250px;
+    background-color: #3498db;
+    color: white;
+    text-align: center;
+    border-radius: 5px;
+    padding: 12px;
+    position: fixed;
+    z-index: 2000;
+    left: 50%;
+    bottom: 30px;
+    transform: translateX(-50%);
+    font-size: 14px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: visibility 0.3s, opacity 0.3s;
+    opacity: 0;
+}
+
+.toast.show {
+    visibility: visible;
+    opacity: 1;
+}
