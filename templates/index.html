@@ -45,7 +45,6 @@
                     <div class="actions-list">
                         {% for action in actions %}
                         <div class="action-item" data-action-id="{{ action.id }}">
-                            <span class="action-icon">{{ action.icon }}</span>
                             <span class="action-name">{{ action.name }}</span>
                         </div>
                         {% endfor %}
@@ -88,7 +87,6 @@
                 {% for action in actions %}
                 <label class="action-checkbox">
                     <input type="checkbox" value="{{ action.id }}">
-                    <span class="action-icon">{{ action.icon }}</span>
                     {{ action.name }}
                 </label>
                 {% endfor %}
@@ -182,19 +180,19 @@
                     const toPoint = vehiclePoints[i + 1];
                     const segmentActions = route?.segments?.[i] || [];
 
-                    const actionIcons = segmentActions.map(actionId => {
+                    const actionNames = segmentActions.map(actionId => {
                         const action = ACTIONS.find(a => a.id === actionId);
-                        return action ? action.icon : '';
-                    }).join(' ');
+                        return action ? action.name : '';
+                    }).join(', ');
 
                     html += `
                         <div class="route-segment">
                             <div class="segment-header">
                                 <span class="segment-title">Участок ${i + 1}: Точка ${fromPoint.id} → Точка ${toPoint.id}</span>
-                                <button class="btn-small btn-primary" onclick="editSegment(${vehicleId}, ${i})">✏️ Действия</button>
+                                <button class="btn-small btn-primary" onclick="editSegment(${vehicleId}, ${i})">Действия</button>
                             </div>
                             <div class="segment-actions">
-                                ${actionIcons || 'Нет действий'}
+                                ${actionNames || 'Нет действий'}
                             </div>
                         </div>
                     `;
@@ -469,6 +467,11 @@
                 data.forEach(route => {
                     routes[route.vehicle_id] = route;
                 });
+
+                // Если есть активный транспорт, обновляем его информацию
+                if (activeVehicleId) {
+                    updateActiveRouteInfo(activeVehicleId);
+                }
             });
         }
 
@@ -511,7 +514,7 @@
                 return;
             }
 
-            let message = '🚀 Запуск маршрутов:\n\n';
+            let message = 'Запуск маршрутов:\n\n';
             activeRoutes.forEach(route => {
                 const vehicle = VEHICLES.find(v => v.id === route.vehicle_id);
                 const points = markers.filter(m => route.point_ids.includes(m.id))
