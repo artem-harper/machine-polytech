@@ -145,8 +145,6 @@
 
             // Показываем информацию о маршруте
             updateActiveRouteInfo(vehicleId);
-
-            // Визуально показываем, что транспорт выбран (подсветкой)
         };
 
         // Обновление информации об активном маршруте
@@ -154,7 +152,7 @@
             const vehicle = VEHICLES.find(v => v.id === vehicleId);
             const route = routes[vehicleId];
             const vehiclePoints = markers.filter(m => m.vehicle_id === vehicleId)
-                                        .sort((a, b) => a.id - b.id);
+                                        .sort((a, b) => a.id - b.id); // сортируем по порядку добавления
 
             let html = `<h4>${vehicle.display_name} (${vehicle.name})</h4>`;
 
@@ -178,7 +176,7 @@
                     html += `
                         <div class="route-segment">
                             <div class="segment-header">
-                                <span class="segment-title">Участок ${i + 1}: Точка ${fromPoint.id} → Точка ${toPoint.id}</span>
+                                <span class="segment-title">Участок ${i + 1}: Точка ${fromPoint.number} → Точка ${toPoint.number}</span>
                                 <button class="btn-small btn-primary" onclick="editSegment(${vehicleId}, ${i})">Действия</button>
                             </div>
                             <div class="segment-actions">
@@ -204,7 +202,7 @@
             const fromPoint = vehiclePoints[segmentIndex];
             const toPoint = vehiclePoints[segmentIndex + 1];
 
-            $('#segmentInfo').text(`Участок ${segmentIndex + 1}: от точки ${fromPoint.id} до точки ${toPoint.id}`);
+            $('#segmentInfo').text(`Участок ${segmentIndex + 1}: от точки ${fromPoint.number} до точки ${toPoint.number}`);
 
             // Загружаем сохраненные действия для этого сегмента
             const route = routes[vehicleId];
@@ -280,7 +278,6 @@
             }
             addMode = !addMode;
             $(this).toggleClass('active');
-            // Никаких уведомлений
         });
 
         // Обработчик клика по карте
@@ -330,14 +327,14 @@
             const marker = L.marker([point.lat, point.lng], {
                 icon: L.divIcon({
                     className: 'custom-marker',
-                    html: `<div style="background-color: ${vehicle.color}; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">${point.id}</div>`,
+                    html: `<div style="background-color: ${vehicle.color}; color: white; border-radius: 50%; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.3);">${point.number}</div>`,
                     iconSize: [30, 30],
                     iconAnchor: [15, 15]
                 })
             }).addTo(map);
 
             marker.bindPopup(`
-                <b>Точка ${point.id}</b><br>
+                <b>Точка ${point.number}</b><br>
                 Транспорт: ${vehicle.display_name} (${vehicle.name})<br>
                 Координаты: ${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}<br>
                 <button onclick="deleteMapPoint(${point.id})" style="margin-top: 5px; padding: 3px 10px; background: #e74c3c; color: white; border: none; border-radius: 3px; cursor: pointer;">Удалить точку</button>
@@ -346,13 +343,13 @@
             markerObjects.push({
                 id: point.id,
                 marker: marker,
-                vehicle_id: point.vehicle_id
+                vehicle_id: point.vehicle_id,
+                number: point.number
             });
         }
 
         // Удаление точки с карты
         window.deleteMapPoint = function(pointId) {
-            // Просто удаляем без подтверждения
             const point = markers.find(m => m.id === pointId);
             if (!point) return;
 
@@ -413,6 +410,8 @@
                 });
 
                 Object.keys(vehicleGroups).forEach(vehicleId => {
+                    // Сортируем точки по ID (порядку добавления)
+                    vehicleGroups[vehicleId].sort((a, b) => a.id - b.id);
                     drawRouteLine(parseInt(vehicleId), vehicleGroups[vehicleId]);
                     updateVehicleStats(parseInt(vehicleId));
                 });
@@ -468,15 +467,10 @@
             const activeRoutes = Object.values(routes);
 
             if (activeRoutes.length === 0) {
-                // Просто ничего не делаем
                 return;
             }
 
-            // Здесь можно добавить логику старта маршрутов
-            // Например, отправить данные на сервер
-            console.log('Запуск маршрутов:', activeRoutes);
-
-            // Визуально показываем, что маршруты запущены (подсветка кнопки)
+            // Визуально показываем, что маршруты запущены
             $(this).css('background-color', '#27ae60');
             setTimeout(() => {
                 $(this).css('background-color', '#f39c12');
