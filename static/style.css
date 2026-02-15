@@ -369,5 +369,74 @@ h1 {
     background: #ecf0f1;
     padding: 3px 10px;
     border-radius: 12px;
-    margin: 0
+    margin: 0 10px;
+}
+
+/* Чекбоксы для действий */
+.action-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 20px 0;
+}
+
+.action-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: 2px solid transparent;
+}
+
+.action-checkbox:hover {
+    background: #e9ecef;
+    border-color: #3498db;
+}
+
+.action-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .main-content {
+        grid-template-columns: 1fr;
+    }
+
+    header {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .controls {
+        justify-content: center;
+    }
+
+    .map-container {
+        height: 400px;
+    }
+
+    .modal-content {
+        margin: 20% auto;
+        width: 95%;
+        padding: 20px;
+    }
+
+    .vehicle-option {
+        flex-direction: column;
+        gap: 10px;
+        text-align: center;
+    }
+
+    .vehicle-stats {
+        flex-direction: column;
+        gap: 5px;
+        align-items: center;
+    }
 }
